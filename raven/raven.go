@@ -35,6 +35,7 @@ type sentryResponse struct {
 }
 
 var headerTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go 0.1, sentry_timestamp=%v, sentry_key=%v"
+const iso8601 = "2006-01-02T15:04:05"
 
 func NewRavenClient(dsn string) (client *RavenClient, err error) {
 	u, err := url.Parse(dsn)
@@ -58,7 +59,7 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 		return "", err
 	}
 	timestamp := time.Now().UTC()
-	timestampStr := timestamp.Format("UnixDate")
+	timestampStr := timestamp.Format(iso8601)
 
 	packet := sentryRequest{
 		EventId:   eventId,
@@ -90,7 +91,7 @@ func (client RavenClient) send(packet *bytes.Buffer, timestamp time.Time) (respo
 	apiURL := *client.URL
 	apiURL.Path = path.Join(apiURL.Path, "/api/store")
 	req, err := http.NewRequest("POST", apiURL.String(), packet)
-	authHeader := fmt.Sprintf(headerTemplate, timestamp, client.PublicKey)
+	authHeader := fmt.Sprintf(headerTemplate, timestamp.Unix(), client.PublicKey)
 	req.Header.Add("X-Sentry-Auth", authHeader)
 
 	resp, err := client.httpClient.Do(req)
