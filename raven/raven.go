@@ -34,7 +34,7 @@ type sentryResponse struct {
 	ResultId string `json:"result_id"`
 }
 
-var headerTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go 0.1, sentry_timestamp=%v, sentry_key=%v"
+const headerTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go/0.1, sentry_timestamp=%v, sentry_key=%v"
 
 const iso8601 = "2006-01-02T15:04:05"
 
@@ -91,6 +91,7 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 func (client RavenClient) send(packet *bytes.Buffer, timestamp time.Time) (response *http.Response, err error) {
 	apiURL := *client.URL
 	apiURL.Path = path.Join(apiURL.Path, "/api/store")
+	apiURL.User = nil
 	req, err := http.NewRequest("POST", apiURL.String(), packet)
 	authHeader := fmt.Sprintf(headerTemplate, timestamp.Unix(), client.PublicKey)
 	req.Header.Add("X-Sentry-Auth", authHeader)
