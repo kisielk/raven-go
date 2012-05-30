@@ -35,6 +35,7 @@ type sentryResponse struct {
 }
 
 var headerTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go 0.1, sentry_timestamp=%v, sentry_key=%v"
+
 const iso8601 = "2006-01-02T15:04:05"
 
 func NewRavenClient(dsn string) (client *RavenClient, err error) {
@@ -63,7 +64,7 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 
 	packet := sentryRequest{
 		EventId:   eventId,
-		Project:   "project",
+		Project:   "default",
 		Message:   message,
 		Timestamp: timestampStr,
 		Level:     "error",
