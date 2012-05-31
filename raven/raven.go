@@ -64,7 +64,7 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 
 	packet := sentryRequest{
 		EventId:   eventId,
-		Project:   "default",
+		Project:   client.Project,
 		Message:   message,
 		Timestamp: timestampStr,
 		Level:     "error",
@@ -90,7 +90,7 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 
 func (client RavenClient) send(packet *bytes.Buffer, timestamp time.Time) (response *http.Response, err error) {
 	apiURL := *client.URL
-	apiURL.Path = path.Join(apiURL.Path, "/api/store")
+	apiURL.Path = path.Join(apiURL.Path, "/api/" + client.Project + "/store")
 	apiURL.User = nil
 	req, err := http.NewRequest("POST", apiURL.String(), packet)
 	authHeader := fmt.Sprintf(headerTemplate, timestamp.Unix(), client.PublicKey)
