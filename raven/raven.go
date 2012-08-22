@@ -2,7 +2,9 @@ package raven
 
 import (
 	"bytes"
+	"compress/zlib"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -50,7 +52,12 @@ func NewRavenClient(dsn string) (client *RavenClient, err error) {
 	secretKey, _ := u.User.Password()
 	u.Path = basePath
 
-	httpClient := &http.Client{}
+	check := func(req *http.Request, via []*http.Request) error {
+		fmt.Printf("%+v", req)
+		return nil
+	}
+
+	httpClient := &http.Client{nil, check, nil}
 	return &RavenClient{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
 
@@ -72,12 +79,25 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 	}
 
 	buf := new(bytes.Buffer)
-	encoder := json.NewEncoder(buf)
-	if err := encoder.Encode(packet); err != nil {
+	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
+	writer := zlib.NewWriter(b64Encoder)
+	jsonEncoder := json.NewEncoder(writer)
+
+	if err := jsonEncoder.Encode(packet); err != nil {
 		return "", err
 	}
 
-	resp, err := client.send(buf, timestamp)
+	err = writer.Close()
+	if err != nil {
+		return "", err
+	}
+
+	err = b64Encoder.Close()
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := client.send(buf.Bytes(), timestamp)
 	if err != nil {
 		return "", err
 	}
@@ -88,20 +108,37 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 	return eventId, nil
 }
 
-func (client RavenClient) send(packet *bytes.Buffer, timestamp time.Time) (response *http.Response, err error) {
+func (client RavenClient) send(packet []byte, timestamp time.Time) (response *http.Response, err error) {
 	apiURL := *client.URL
-	apiURL.Path = path.Join(apiURL.Path, "/api/" + client.Project + "/store")
+	apiURL.Path = path.Join(apiURL.Path, "/api/"+client.Project+"/store/")
 	apiURL.User = nil
-	req, err := http.NewRequest("POST", apiURL.String(), packet)
-	authHeader := fmt.Sprintf(headerTemplate, timestamp.Unix(), client.PublicKey)
-	req.Header.Add("X-Sentry-Auth", authHeader)
+	location := apiURL.String()
 
-	resp, err := client.httpClient.Do(req)
-	if err != nil {
-		return nil, err
+	for {
+		buf := bytes.NewBuffer(packet)
+		req, err := http.NewRequest("POST", location, buf)
+		if err != nil {
+			return nil, err
+		}
+
+		authHeader := fmt.Sprintf(headerTemplate, timestamp.Unix(), client.PublicKey)
+		req.Header.Add("X-Sentry-Auth", authHeader)
+		req.Header.Add("Content-Type", "application/octet-stream")
+		req.Header.Add("Connection", "close")
+		req.Header.Add("Accept-Encoding", "identity")
+
+		resp, err := client.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode == 301 {
+			location = resp.Header["Location"][0]
+		} else {
+			return resp, nil
+		}
 	}
-
-	return resp, nil
+	return nil, nil
 }
 
 func uuid4() (string, error) {

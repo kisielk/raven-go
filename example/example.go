@@ -10,8 +10,8 @@ import (
 func main() {
 
 	var dsn string
-	if len(os.Args) > 2 {
-		dsn = strings.Join(os.Args[2:], " ")
+	if len(os.Args) >= 2 {
+		dsn = strings.Join(os.Args[1:], " ")
 	} else {
 		dsn = os.Getenv("SENTRY_DSN")
 	}
