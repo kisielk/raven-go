@@ -1,3 +1,19 @@
+/*
+
+	Package raven is priveds a client and library for sending messages and exceptions to Sentry: http://getsentry.com
+
+	Usage:
+
+	Create a new client using the NewClient() function. The value for the DSN parameter can be obtained
+	from the project page in the Sentry web interface. After the client has been created use the CaptureMessage
+	method to send messages to the server.
+
+		client, err := raven.NewClient(dsn)
+		...
+		id, err := client.CaptureMessage("some text")
+
+
+*/
 package raven
 
 import (
@@ -15,7 +31,7 @@ import (
 	"time"
 )
 
-type RavenClient struct {
+type Client struct {
 	URL        *url.URL
 	PublicKey  string
 	SecretKey  string
@@ -36,11 +52,18 @@ type sentryResponse struct {
 	ResultId string `json:"result_id"`
 }
 
-const headerTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go/0.1, sentry_timestamp=%v, sentry_key=%v"
+// Template for the X-Sentry-Auth header
+const xSentryAuthTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go/0.1, sentry_timestamp=%v, sentry_key=%v"
 
+// An iso8601 timestamp without the timezone. This is the format Sentry expects.
 const iso8601 = "2006-01-02T15:04:05"
 
-func NewRavenClient(dsn string) (client *RavenClient, err error) {
+// NewClient creates a new client for a server identified by the given dsn
+// A dsn is a string in the form:
+//	{PROTOCOL}://{PUBLIC_KEY}:{SECRET_KEY}@{HOST}/{PATH}{PROJECT_ID}
+// eg:
+//	http://abcd:efgh@sentry.example.com/sentry/project1
+func NewClient(dsn string) (client *Client, err error) {
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return nil, err
@@ -58,10 +81,11 @@ func NewRavenClient(dsn string) (client *RavenClient, err error) {
 	}
 
 	httpClient := &http.Client{nil, check, nil}
-	return &RavenClient{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
+	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
 
-func (client RavenClient) CaptureMessage(message string) (result string, err error) {
+// CaptureMessage sends a message to the Sentry server. The resulting string is an event identifier.
+func (client Client) CaptureMessage(message string) (result string, err error) {
 	eventId, err := uuid4()
 	if err != nil {
 		return "", err
@@ -108,12 +132,14 @@ func (client RavenClient) CaptureMessage(message string) (result string, err err
 	return eventId, nil
 }
 
-func (client RavenClient) send(packet []byte, timestamp time.Time) (response *http.Response, err error) {
+// sends a packet to the sentry server with a given timestamp
+func (client Client) send(packet []byte, timestamp time.Time) (response *http.Response, err error) {
 	apiURL := *client.URL
 	apiURL.Path = path.Join(apiURL.Path, "/api/"+client.Project+"/store/")
 	apiURL.User = nil
 	location := apiURL.String()
 
+	// for loop to follow redirects
 	for {
 		buf := bytes.NewBuffer(packet)
 		req, err := http.NewRequest("POST", location, buf)
@@ -121,7 +147,7 @@ func (client RavenClient) send(packet []byte, timestamp time.Time) (response *ht
 			return nil, err
 		}
 
-		authHeader := fmt.Sprintf(headerTemplate, timestamp.Unix(), client.PublicKey)
+		authHeader := fmt.Sprintf(xSentryAuthTemplate, timestamp.Unix(), client.PublicKey)
 		req.Header.Add("X-Sentry-Auth", authHeader)
 		req.Header.Add("Content-Type", "application/octet-stream")
 		req.Header.Add("Connection", "close")
@@ -133,12 +159,14 @@ func (client RavenClient) send(packet []byte, timestamp time.Time) (response *ht
 		}
 
 		if resp.StatusCode == 301 {
+			// set the location to the new one to retry on the next iteration
 			location = resp.Header["Location"][0]
 		} else {
 			return resp, nil
 		}
 	}
-	return nil, nil
+	// should never get here
+	panic("send broke out of loop")
 }
 
 func uuid4() (string, error) {

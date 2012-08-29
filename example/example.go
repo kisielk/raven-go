@@ -23,7 +23,7 @@ func main() {
 	}
 
 	fmt.Printf("Using DSN configuration:\n %v\n", dsn)
-	client, err := raven.NewRavenClient(dsn)
+	client, err := raven.NewClient(dsn)
 
 	if err != nil {
 		fmt.Printf("could not connect: %v", dsn)
