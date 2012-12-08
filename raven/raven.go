@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -85,7 +86,7 @@ func NewClient(dsn string) (client *Client, err error) {
 }
 
 // CaptureMessage sends a message to the Sentry server. The resulting string is an event identifier.
-func (client Client) CaptureMessage(message string) (result string, err error) {
+func (client Client) CaptureMessage(message ...string) (result string, err error) {
 	eventId, err := uuid4()
 	if err != nil {
 		return "", err
@@ -96,7 +97,7 @@ func (client Client) CaptureMessage(message string) (result string, err error) {
 	packet := sentryRequest{
 		EventId:   eventId,
 		Project:   client.Project,
-		Message:   message,
+		Message:   strings.Join(message, ""),
 		Timestamp: timestampStr,
 		Level:     "error",
 		Logger:    "root",
