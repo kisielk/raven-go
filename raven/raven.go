@@ -97,7 +97,7 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 	packet := sentryRequest{
 		EventId:   eventId,
 		Project:   client.Project,
-		Message:   strings.Join(message, ""),
+		Message:   strings.Join(message, " "),
 		Timestamp: timestampStr,
 		Level:     "error",
 		Logger:    "root",
@@ -131,6 +131,12 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 	}
 
 	return eventId, nil
+}
+
+// CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
+// formating the message 
+func (client Client) CaptureMessagef(format string, a ...interface{}) (result string, err error) {
+	return client.CaptureMessage(fmt.Sprintf(format, a))
 }
 
 // sends a packet to the sentry server with a given timestamp
