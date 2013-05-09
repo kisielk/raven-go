@@ -142,8 +142,8 @@ func (client Client) CaptureMessagef(format string, a ...interface{}) (result st
 // sends a packet to the sentry server with a given timestamp
 func (client Client) send(packet []byte, timestamp time.Time) (response *http.Response, err error) {
 	apiURL := *client.URL
-	apiURL.Path = path.Join(apiURL.Path, "/api/"+client.Project+"/store/")
-	apiURL.User = nil
+	apiURL.Path = path.Join(apiURL.Path, "/api/"+client.Project+"/store")
+	apiURL.Path += "/"
 	location := apiURL.String()
 
 	// for loop to follow redirects
