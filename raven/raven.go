@@ -122,13 +122,10 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 		return "", err
 	}
 
-	code, status, err := client.send(buf.Bytes(), timestamp)
+	err = client.send(buf.Bytes(), timestamp)
 
 	if err != nil {
 		return "", err
-	}
-	if code != 200 {
-		return "", errors.New(status)
 	}
 
 	return eventId, nil
@@ -141,7 +138,7 @@ func (client Client) CaptureMessagef(format string, a ...interface{}) (result st
 }
 
 // sends a packet to the sentry server with a given timestamp
-func (client Client) send(packet []byte, timestamp time.Time) (statusCode int, status string, err error) {
+func (client Client) send(packet []byte, timestamp time.Time) (err error) {
 	apiURL := *client.URL
 	apiURL.Path = path.Join(apiURL.Path, "/api/"+client.Project+"/store/")
 	apiURL.User = nil
@@ -152,7 +149,7 @@ func (client Client) send(packet []byte, timestamp time.Time) (statusCode int, s
 		buf := bytes.NewBuffer(packet)
 		req, err := http.NewRequest("POST", location, buf)
 		if err != nil {
-			return -1, "", err
+			return err
 		}
 
 		authHeader := fmt.Sprintf(xSentryAuthTemplate, timestamp.Unix(), client.PublicKey)
@@ -168,14 +165,17 @@ func (client Client) send(packet []byte, timestamp time.Time) (statusCode int, s
 		}
 
 		if err != nil {
-			return -1, "", err
+			return err
 		}
 
-		if resp.StatusCode == 301 {
+		switch resp.StatusCode {
+		case 301:
 			// set the location to the new one to retry on the next iteration
 			location = resp.Header["Location"][0]
-		} else {
-			return resp.StatusCode, resp.Status, nil
+		case 200:
+			return nil
+		default:
+			return errors.New(resp.Status)
 		}
 	}
 	// should never get here
