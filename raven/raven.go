@@ -122,25 +122,23 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 		return "", err
 	}
 
-	resp, err := client.send(buf.Bytes(), timestamp)
+	err = client.send(buf.Bytes(), timestamp)
+
 	if err != nil {
 		return "", err
-	}
-	if resp.StatusCode != 200 {
-		return "", errors.New(resp.Status)
 	}
 
 	return eventId, nil
 }
 
 // CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
-// formating the message 
+// formating the message
 func (client Client) CaptureMessagef(format string, a ...interface{}) (result string, err error) {
 	return client.CaptureMessage(fmt.Sprintf(format, a))
 }
 
 // sends a packet to the sentry server with a given timestamp
-func (client Client) send(packet []byte, timestamp time.Time) (response *http.Response, err error) {
+func (client Client) send(packet []byte, timestamp time.Time) (err error) {
 	apiURL := *client.URL
 	apiURL.Path = path.Join(apiURL.Path, "/api/"+client.Project+"/store")
 	apiURL.Path += "/"
@@ -151,7 +149,7 @@ func (client Client) send(packet []byte, timestamp time.Time) (response *http.Re
 		buf := bytes.NewBuffer(packet)
 		req, err := http.NewRequest("POST", location, buf)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		authHeader := fmt.Sprintf(xSentryAuthTemplate, timestamp.Unix(), client.PublicKey)
@@ -161,15 +159,21 @@ func (client Client) send(packet []byte, timestamp time.Time) (response *http.Re
 		req.Header.Add("Accept-Encoding", "identity")
 
 		resp, err := client.httpClient.Do(req)
+
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		if resp.StatusCode == 301 {
+		defer resp.Body.Close()
+
+		switch resp.StatusCode {
+		case 301:
 			// set the location to the new one to retry on the next iteration
 			location = resp.Header["Location"][0]
-		} else {
-			return resp, nil
+		case 200:
+			return nil
+		default:
+			return errors.New(resp.Status)
 		}
 	}
 	// should never get here
