@@ -160,13 +160,11 @@ func (client Client) send(packet []byte, timestamp time.Time) (err error) {
 
 		resp, err := client.httpClient.Do(req)
 
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-
 		if err != nil {
 			return err
 		}
+
+		defer resp.Body.Close()
 
 		switch resp.StatusCode {
 		case 301:
