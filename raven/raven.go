@@ -1,6 +1,6 @@
 /*
 
-	Package raven is priveds a client and library for sending messages and exceptions to Sentry: http://getsentry.com
+	Package raven is a client and library for sending messages and exceptions to Sentry: http://getsentry.com
 
 	Usage:
 
@@ -134,7 +134,7 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 }
 
 // CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
-// formating the message 
+// formatting the message
 func (client Client) CaptureMessagef(format string, a ...interface{}) (result string, err error) {
 	return client.CaptureMessage(fmt.Sprintf(format, a))
 }
