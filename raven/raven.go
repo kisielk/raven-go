@@ -72,8 +72,16 @@ func NewClient(dsn string) (client *Client, err error) {
 
 	basePath := path.Dir(u.Path)
 	project := path.Base(u.Path)
+
+	if u.User == nil {
+		return nil, fmt.Errorf("the DSN must contain a public and secret key")
+	}
 	publicKey := u.User.Username()
-	secretKey, _ := u.User.Password()
+	secretKey, keyIsSet := u.User.Password()
+	if !keyIsSet {
+		return nil, fmt.Errorf("the DSN must contain a secret key")
+	}
+
 	u.Path = basePath
 
 	check := func(req *http.Request, via []*http.Request) error {
