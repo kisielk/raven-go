@@ -27,6 +27,7 @@ func main() {
 
 	if err != nil {
 		fmt.Printf("could not connect: %v", dsn)
+		return
 	}
 
 	fmt.Printf("Sending a test message...\n")
