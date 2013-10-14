@@ -40,9 +40,9 @@ type Client struct {
 	httpClient *http.Client
 }
 
-type sentryRequest struct {
+type Message struct {
 	EventId   string `json:"event_id"`
-	Project   string `json:"project"`
+	projectId string `json:"project"`
 	Message   string `json:"message"`
 	Timestamp string `json:"timestamp"`
 	Level     string `json:"level"`
@@ -95,11 +95,12 @@ func NewClient(dsn string) (client *Client, err error) {
 
 // CaptureMessage sends a message to the Sentry server. The resulting string is an event identifier.
 func (client Client) CaptureMessage(message ...string) (result string, err error) {
-	eventId, err := client.CaptureMessageA(strings.Join(message, " "), "error", "root")
-	if err != nil {
+	var msg Message = Message{Message: strings.Join(message, " ")}
+	sentryErr := client.Capture(&msg)
+	if sentryErr != nil {
 		return "", err
 	}
-	return eventId, nil
+	return msg.EventId, nil
 }
 
 // CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
@@ -108,32 +109,34 @@ func (client Client) CaptureMessagef(format string, a ...interface{}) (result st
 	return client.CaptureMessage(fmt.Sprintf(format, a))
 }
 
-// CaptureMessageA is similar to CaptureMessage, except that you can define the error level and logger.
-func (client Client) CaptureMessageA(message, level, logger string) (result string, err error) {
-	eventId, err := uuid4()
-	if err != nil {
-		return "", err
-	}
-	timestamp := time.Now().UTC()
-	timestampStr := timestamp.Format(iso8601)
-
-	packet := sentryRequest{
-		EventId:   eventId,
-		Project:   client.Project,
-		Message:   message,
-		Timestamp: timestampStr,
-		Level:     level,
-		Logger:    logger,
-	}
-
-	if err := client.sendRequest(packet, timestamp); err != nil {
-		return "", err
-	}
-	return eventId, nil
-}
-
 // Sends the specified request after encoding it into a byte slice.
-func (client Client) sendRequest(request sentryRequest, timestamp time.Time) error {
+func (client Client) Capture(request *Message) error {
+	// Fill in defaults
+	request.projectId = client.Project
+	if request.EventId == "" {
+		eventId, err := uuid4()
+		if err != nil {
+			return err
+		}
+		request.EventId = eventId
+	}
+	if request.Level == "" {
+		request.Level = "error"
+	}
+	if request.Logger == "" {
+		request.Logger = "root"
+	}
+	if request.Timestamp == "" {
+		now := time.Now().UTC()
+		request.Timestamp = now.Format(iso8601)
+	}
+
+	// Send
+	timestamp, err := time.Parse(iso8601, request.Timestamp)
+	if err != nil {
+		return err
+	}
+
 	buf := new(bytes.Buffer)
 	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
 	writer := zlib.NewWriter(b64Encoder)
@@ -143,7 +146,7 @@ func (client Client) sendRequest(request sentryRequest, timestamp time.Time) err
 		return err
 	}
 
-	err := writer.Close()
+	err = writer.Close()
 	if err != nil {
 		return err
 	}
