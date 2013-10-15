@@ -40,7 +40,7 @@ type Client struct {
 	httpClient *http.Client
 }
 
-type Message struct {
+type Event struct {
 	EventId   string `json:"event_id"`
 	projectId string `json:"project"`
 	Message   string `json:"message"`
@@ -95,12 +95,13 @@ func NewClient(dsn string) (client *Client, err error) {
 
 // CaptureMessage sends a message to the Sentry server. The resulting string is an event identifier.
 func (client Client) CaptureMessage(message ...string) (result string, err error) {
-	var msg Message = Message{Message: strings.Join(message, " ")}
-	sentryErr := client.Capture(&msg)
+	ev := Event{Message: strings.Join(message, " ")}
+	sentryErr := client.Capture(&ev)
+
 	if sentryErr != nil {
-		return "", err
+		return "", sentryErr
 	}
-	return msg.EventId, nil
+	return ev.EventId, nil
 }
 
 // CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
@@ -110,29 +111,29 @@ func (client Client) CaptureMessagef(format string, a ...interface{}) (result st
 }
 
 // Sends the specified request after encoding it into a byte slice.
-func (client Client) Capture(request *Message) error {
+func (client Client) Capture(ev *Event) error {
 	// Fill in defaults
-	request.projectId = client.Project
-	if request.EventId == "" {
+	ev.projectId = client.Project
+	if ev.EventId == "" {
 		eventId, err := uuid4()
 		if err != nil {
 			return err
 		}
-		request.EventId = eventId
+		ev.EventId = eventId
 	}
-	if request.Level == "" {
-		request.Level = "error"
+	if ev.Level == "" {
+		ev.Level = "error"
 	}
-	if request.Logger == "" {
-		request.Logger = "root"
+	if ev.Logger == "" {
+		ev.Logger = "root"
 	}
-	if request.Timestamp == "" {
+	if ev.Timestamp == "" {
 		now := time.Now().UTC()
-		request.Timestamp = now.Format(iso8601)
+		ev.Timestamp = now.Format(iso8601)
 	}
 
 	// Send
-	timestamp, err := time.Parse(iso8601, request.Timestamp)
+	timestamp, err := time.Parse(iso8601, ev.Timestamp)
 	if err != nil {
 		return err
 	}
@@ -142,7 +143,7 @@ func (client Client) Capture(request *Message) error {
 	writer := zlib.NewWriter(b64Encoder)
 	jsonEncoder := json.NewEncoder(writer)
 
-	if err := jsonEncoder.Encode(request); err != nil {
+	if err := jsonEncoder.Encode(ev); err != nil {
 		return err
 	}
 
