@@ -11,8 +11,6 @@
 		client, err := raven.NewClient(dsn)
 		...
 		id, err := client.CaptureMessage("some text")
-
-
 */
 package raven
 
@@ -42,7 +40,7 @@ type Client struct {
 
 type Event struct {
 	EventId   string `json:"event_id"`
-	projectId string `json:"project"`
+	Project   string `json:"project"`
 	Message   string `json:"message"`
 	Timestamp string `json:"timestamp"`
 	Level     string `json:"level"`
@@ -113,7 +111,7 @@ func (client Client) CaptureMessagef(format string, a ...interface{}) (result st
 // Sends the specified request after encoding it into a byte slice.
 func (client Client) Capture(ev *Event) error {
 	// Fill in defaults
-	ev.projectId = client.Project
+	ev.Project = client.Project
 	if ev.EventId == "" {
 		eventId, err := uuid4()
 		if err != nil {
@@ -158,7 +156,6 @@ func (client Client) Capture(ev *Event) error {
 	}
 
 	err = client.send(buf.Bytes(), timestamp)
-
 	if err != nil {
 		return err
 	}
