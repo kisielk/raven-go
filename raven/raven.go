@@ -108,7 +108,7 @@ func (client Client) CaptureMessagef(format string, a ...interface{}) (result st
 	return client.CaptureMessage(fmt.Sprintf(format, a))
 }
 
-// Sends the specified request after encoding it into a byte slice.
+// Sends the given event to the sentry servers after encoding it into a byte slice.
 func (client Client) Capture(ev *Event) error {
 	// Fill in defaults
 	ev.Project = client.Project
