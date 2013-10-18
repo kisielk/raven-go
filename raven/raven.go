@@ -11,6 +11,11 @@
 		client, err := raven.NewClient(dsn)
 		...
 		id, err := client.CaptureMessage("some text")
+
+	If you want to have more finegrained control over the send event, you can create the event instance yourself
+
+		client.Capture(&raven.Event{Message: "Some Text", Logger:"auth"})
+
 */
 package raven
 
