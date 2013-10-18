@@ -11,8 +11,6 @@
 		client, err := raven.NewClient(dsn)
 		...
 		id, err := client.CaptureMessage("some text")
-
-
 */
 package raven
 
@@ -40,7 +38,7 @@ type Client struct {
 	httpClient *http.Client
 }
 
-type sentryRequest struct {
+type Event struct {
 	EventId   string `json:"event_id"`
 	Project   string `json:"project"`
 	Message   string `json:"message"`
@@ -95,20 +93,47 @@ func NewClient(dsn string) (client *Client, err error) {
 
 // CaptureMessage sends a message to the Sentry server. The resulting string is an event identifier.
 func (client Client) CaptureMessage(message ...string) (result string, err error) {
-	eventId, err := uuid4()
-	if err != nil {
-		return "", err
-	}
-	timestamp := time.Now().UTC()
-	timestampStr := timestamp.Format(iso8601)
+	ev := Event{Message: strings.Join(message, " ")}
+	sentryErr := client.Capture(&ev)
 
-	packet := sentryRequest{
-		EventId:   eventId,
-		Project:   client.Project,
-		Message:   strings.Join(message, " "),
-		Timestamp: timestampStr,
-		Level:     "error",
-		Logger:    "root",
+	if sentryErr != nil {
+		return "", sentryErr
+	}
+	return ev.EventId, nil
+}
+
+// CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
+// formatting the message
+func (client Client) CaptureMessagef(format string, a ...interface{}) (result string, err error) {
+	return client.CaptureMessage(fmt.Sprintf(format, a))
+}
+
+// Sends the given event to the sentry servers after encoding it into a byte slice.
+func (client Client) Capture(ev *Event) error {
+	// Fill in defaults
+	ev.Project = client.Project
+	if ev.EventId == "" {
+		eventId, err := uuid4()
+		if err != nil {
+			return err
+		}
+		ev.EventId = eventId
+	}
+	if ev.Level == "" {
+		ev.Level = "error"
+	}
+	if ev.Logger == "" {
+		ev.Logger = "root"
+	}
+	if ev.Timestamp == "" {
+		now := time.Now().UTC()
+		ev.Timestamp = now.Format(iso8601)
+	}
+
+	// Send
+	timestamp, err := time.Parse(iso8601, ev.Timestamp)
+	if err != nil {
+		return err
 	}
 
 	buf := new(bytes.Buffer)
@@ -116,33 +141,26 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 	writer := zlib.NewWriter(b64Encoder)
 	jsonEncoder := json.NewEncoder(writer)
 
-	if err := jsonEncoder.Encode(packet); err != nil {
-		return "", err
+	if err := jsonEncoder.Encode(ev); err != nil {
+		return err
 	}
 
 	err = writer.Close()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	err = b64Encoder.Close()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	err = client.send(buf.Bytes(), timestamp)
-
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return eventId, nil
-}
-
-// CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
-// formatting the message
-func (client Client) CaptureMessagef(format string, a ...interface{}) (result string, err error) {
-	return client.CaptureMessage(fmt.Sprintf(format, a))
+	return nil
 }
 
 // sends a packet to the sentry server with a given timestamp
