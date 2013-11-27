@@ -110,7 +110,7 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 // CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
 // formatting the message
 func (client Client) CaptureMessagef(format string, a ...interface{}) (result string, err error) {
-	return client.CaptureMessage(fmt.Sprintf(format, a))
+	return client.CaptureMessage(fmt.Sprintf(format, a...))
 }
 
 // Sends the given event to the sentry servers after encoding it into a byte slice.
