@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"testing"
+	"time"
 )
 
 func BuildSentryDSN(baseUrl, publicKey, secretKey, project, sentryPath string) string {
@@ -110,4 +111,29 @@ func TestCapture(t *testing.T) {
 	testEvent(&Event{Message: "test.root.error", Timestamp: "2013-10-17T11:25:59"})
 	testEvent(&Event{Message: "test.root.error", EventId: "1234-34567-8912-124123"})
 	testEvent(&Event{Message: "test.auth.info", Level: "info", Logger: "auth"})
+}
+
+func TestTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, req *http.Request) {
+			time.Sleep(3100 * time.Millisecond)
+			fmt.Fprint(w, "hello")
+		}))
+	defer server.Close()
+
+	publicKey := "abcd"
+	secretKey := "efgh"
+	project := "1"
+	sentryPath := "/sentry/path"
+
+	// Build the client
+	client, err := NewClient(BuildSentryDSN(server.URL, publicKey, secretKey, project, sentryPath))
+	if err != nil {
+		t.Fatalf("failed to make client: %s", err)
+	}
+
+	_, err = client.CaptureMessage("Test message")
+	if err == nil {
+		t.Fatalf("Request should have timed out")
+	}
 }
