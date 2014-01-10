@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -62,6 +63,11 @@ const xSentryAuthTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go/0
 // An iso8601 timestamp without the timezone. This is the format Sentry expects.
 const iso8601 = "2006-01-02T15:04:05"
 
+const (
+	httpConnectTimeout   = 3 * time.Second
+	httpReadWriteTimeout = 3 * time.Second
+)
+
 // NewClient creates a new client for a server identified by the given dsn
 // A dsn is a string in the form:
 //	{PROTOCOL}://{PUBLIC_KEY}:{SECRET_KEY}@{HOST}/{PATH}{PROJECT_ID}
@@ -92,7 +98,8 @@ func NewClient(dsn string) (client *Client, err error) {
 		return nil
 	}
 
-	httpClient := &http.Client{nil, check, nil}
+	transport := &http.Transport{Dial: timeoutDialer(httpConnectTimeout, httpReadWriteTimeout)}
+	httpClient := &http.Client{transport, check, nil}
 	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
 
@@ -222,4 +229,15 @@ func uuid4() (string, error) {
 	uuid[4] = 0x40
 
 	return hex.EncodeToString(uuid), nil
+}
+
+func timeoutDialer(cTimeout time.Duration, rwTimeout time.Duration) func(net, addr string) (c net.Conn, err error) {
+	return func(netw, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(netw, addr, cTimeout)
+		if err != nil {
+			return nil, err
+		}
+		conn.SetDeadline(time.Now().Add(rwTimeout))
+		return conn, nil
+	}
 }
