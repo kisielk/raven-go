@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -63,7 +64,7 @@ const xSentryAuthTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go/0
 // An iso8601 timestamp without the timezone. This is the format Sentry expects.
 const iso8601 = "2006-01-02T15:04:05"
 
-const (
+var (
 	httpConnectTimeout   = 3 * time.Second
 	httpReadWriteTimeout = 3 * time.Second
 )
@@ -96,6 +97,15 @@ func NewClient(dsn string) (client *Client, err error) {
 	check := func(req *http.Request, via []*http.Request) error {
 		fmt.Printf("%+v", req)
 		return nil
+	}
+
+	if st, ok := u.Query()["timeout"]; ok && len(st) > 0 {
+		if timeout, err := strconv.Atoi(st[0]); err == nil {
+			httpConnectTimeout = time.Duration(timeout) * time.Second
+			httpReadWriteTimeout = time.Duration(timeout) * time.Second
+		} else {
+			return nil, fmt.Errorf("Timeout should have an Integer argument")
+		}
 	}
 
 	transport := &http.Transport{Dial: timeoutDialer(httpConnectTimeout, httpReadWriteTimeout)}

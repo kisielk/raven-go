@@ -127,13 +127,24 @@ func TestTimeout(t *testing.T) {
 	sentryPath := "/sentry/path"
 
 	// Build the client
-	client, err := NewClient(BuildSentryDSN(server.URL, publicKey, secretKey, project, sentryPath))
+	dsn := BuildSentryDSN(server.URL, publicKey, secretKey, project, sentryPath)
+	client, err := NewClient(dsn)
 	if err != nil {
 		t.Fatalf("failed to make client: %s", err)
 	}
-
 	_, err = client.CaptureMessage("Test message")
 	if err == nil {
 		t.Fatalf("Request should have timed out")
 	}
+
+	// Build the client with a timeout
+	client, err = NewClient(dsn + "?timeout=4")
+	if err != nil {
+		t.Fatalf("failed to make client: %s", err)
+	}
+	_, err = client.CaptureMessage("Test message")
+	if err != nil {
+		t.Fatalf("Request should not have timed out")
+	}
+
 }
