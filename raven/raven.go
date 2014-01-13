@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -63,10 +64,7 @@ const xSentryAuthTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go/0
 // An iso8601 timestamp without the timezone. This is the format Sentry expects.
 const iso8601 = "2006-01-02T15:04:05"
 
-const (
-	httpConnectTimeout   = 3 * time.Second
-	httpReadWriteTimeout = 3 * time.Second
-)
+const defaultTimeout = 3 * time.Second
 
 // NewClient creates a new client for a server identified by the given dsn
 // A dsn is a string in the form:
@@ -98,7 +96,18 @@ func NewClient(dsn string) (client *Client, err error) {
 		return nil
 	}
 
-	transport := &http.Transport{Dial: timeoutDialer(httpConnectTimeout, httpReadWriteTimeout)}
+	httpConnectTimeout := defaultTimeout
+	httpReadWriteTimeout := defaultTimeout
+	if st := u.Query().Get("timeout"); st != "" {
+		if timeout, err := strconv.Atoi(st); err == nil {
+			httpConnectTimeout = time.Duration(timeout) * time.Second
+			httpReadWriteTimeout = time.Duration(timeout) * time.Second
+		} else {
+			return nil, fmt.Errorf("Timeout should have an Integer argument")
+		}
+	}
+
+	transport := &transport{httpTransport: &http.Transport{Dial: timeoutDialer(httpConnectTimeout)}, timeout: httpReadWriteTimeout}
 	httpClient := &http.Client{transport, check, nil}
 	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
@@ -231,13 +240,28 @@ func uuid4() (string, error) {
 	return hex.EncodeToString(uuid), nil
 }
 
-func timeoutDialer(cTimeout time.Duration, rwTimeout time.Duration) func(net, addr string) (c net.Conn, err error) {
+func timeoutDialer(cTimeout time.Duration) func(net, addr string) (c net.Conn, err error) {
 	return func(netw, addr string) (net.Conn, error) {
 		conn, err := net.DialTimeout(netw, addr, cTimeout)
 		if err != nil {
 			return nil, err
 		}
-		conn.SetDeadline(time.Now().Add(rwTimeout))
 		return conn, nil
 	}
+}
+
+// A custom http.Transport which allows us to put a timeout on each request.
+type transport struct {
+	httpTransport *http.Transport
+	timeout       time.Duration
+}
+
+// Make use of Go 1.1's CancelRequest to close an outgoing connection if it
+// took longer than [timeout] to get a response.
+func (T *transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	timer := time.AfterFunc(T.timeout, func() {
+		T.httpTransport.CancelRequest(req)
+	})
+	defer timer.Stop()
+	return T.httpTransport.RoundTrip(req)
 }
