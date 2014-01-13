@@ -259,19 +259,9 @@ type transport struct {
 // Make use of Go 1.1's CancelRequest to close an outgoing connection if it
 // took longer than [timeout] to get a response.
 func (T *transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	done := make(chan struct{})
-	defer close(done)
-
-	timer := time.NewTimer(T.timeout)
-	go func() {
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-			T.httpTransport.CancelRequest(req)
-		case <-done:
-		}
-	}()
-
-	resp, err := T.httpTransport.RoundTrip(req)
-	return resp, err
+	timer := time.AfterFunc(T.timeout, func() {
+		T.httpTransport.CancelRequest(req)
+	})
+	defer timer.Stop()
+	return T.httpTransport.RoundTrip(req)
 }
