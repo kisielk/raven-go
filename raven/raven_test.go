@@ -146,5 +146,4 @@ func TestTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Request should not have timed out")
 	}
-
 }

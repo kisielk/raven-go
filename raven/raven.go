@@ -99,8 +99,8 @@ func NewClient(dsn string) (client *Client, err error) {
 		return nil
 	}
 
-	if st, ok := u.Query()["timeout"]; ok && len(st) > 0 {
-		if timeout, err := strconv.Atoi(st[0]); err == nil {
+	if st := u.Query().Get("timeout"); st != "" {
+		if timeout, err := strconv.Atoi(st); err == nil {
 			httpConnectTimeout = time.Duration(timeout) * time.Second
 			httpReadWriteTimeout = time.Duration(timeout) * time.Second
 		} else {
