@@ -64,10 +64,7 @@ const xSentryAuthTemplate = "Sentry sentry_version=2.0, sentry_client=raven-go/0
 // An iso8601 timestamp without the timezone. This is the format Sentry expects.
 const iso8601 = "2006-01-02T15:04:05"
 
-var (
-	httpConnectTimeout   = 3 * time.Second
-	httpReadWriteTimeout = 3 * time.Second
-)
+const defaultTimeout = 3 * time.Second
 
 // NewClient creates a new client for a server identified by the given dsn
 // A dsn is a string in the form:
@@ -99,6 +96,8 @@ func NewClient(dsn string) (client *Client, err error) {
 		return nil
 	}
 
+	httpConnectTimeout := defaultTimeout
+	httpReadWriteTimeout := defaultTimeout
 	if st := u.Query().Get("timeout"); st != "" {
 		if timeout, err := strconv.Atoi(st); err == nil {
 			httpConnectTimeout = time.Duration(timeout) * time.Second
