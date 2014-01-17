@@ -107,7 +107,11 @@ func NewClient(dsn string) (client *Client, err error) {
 		}
 	}
 
-	transport := &transport{httpTransport: &http.Transport{Dial: timeoutDialer(httpConnectTimeout)}, timeout: httpReadWriteTimeout}
+	transport := &transport{
+		httpTransport: &http.Transport{
+			Dial:  timeoutDialer(httpConnectTimeout),
+			Proxy: http.ProxyFromEnvironment,
+		}, timeout: httpReadWriteTimeout}
 	httpClient := &http.Client{transport, check, nil}
 	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
