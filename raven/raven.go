@@ -41,13 +41,13 @@ type Client struct {
 	URL        *url.URL
 	PublicKey  string
 	SecretKey  string
-	Project    string
+	Project    int
 	httpClient *http.Client
 }
 
 type Event struct {
 	EventId   string `json:"event_id"`
-	Project   string `json:"project"`
+	Project   int    `json:"project"`
 	Message   string `json:"message"`
 	Timestamp string `json:"timestamp"`
 	Level     string `json:"level"`
@@ -78,7 +78,10 @@ func NewClient(dsn string) (client *Client, err error) {
 	}
 
 	basePath := path.Dir(u.Path)
-	project := path.Base(u.Path)
+	project, err := strconv.Atoi(path.Base(u.Path))
+	if err != nil {
+		return nil, err
+	}
 
 	if u.User == nil {
 		return nil, fmt.Errorf("the DSN must contain a public and secret key")
@@ -191,7 +194,7 @@ func (client Client) Capture(ev *Event) error {
 // sends a packet to the sentry server with a given timestamp
 func (client Client) send(packet []byte, timestamp time.Time) (err error) {
 	apiURL := *client.URL
-	apiURL.Path = path.Join(apiURL.Path, "/api/"+client.Project+"/store")
+	apiURL.Path = path.Join(apiURL.Path, "/api/"+strconv.Itoa(client.Project)+"/store")
 	apiURL.Path += "/"
 	location := apiURL.String()
 

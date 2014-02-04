@@ -6,14 +6,15 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path"
+	"strconv"
 	"testing"
 	"time"
 )
 
-func BuildSentryDSN(baseUrl, publicKey, secretKey, project, sentryPath string) string {
+func BuildSentryDSN(baseUrl, publicKey, secretKey string, project int, sentryPath string) string {
 	u, _ := url.Parse(baseUrl)
 	u.User = url.UserPassword(publicKey, secretKey)
-	u.Path = path.Join(sentryPath, project)
+	u.Path = path.Join(sentryPath, strconv.Itoa(project))
 	return u.String()
 }
 
@@ -26,7 +27,7 @@ func TestCaptureMessage(t *testing.T) {
 
 	publicKey := "abcd"
 	secretKey := "efgh"
-	project := "1"
+	project := 1
 	sentryPath := "/sentry/path"
 
 	// Build the client
@@ -69,7 +70,7 @@ func TestCapture(t *testing.T) {
 
 	publicKey := "abcd"
 	secretKey := "efgh"
-	project := "1"
+	project := 1
 	sentryPath := "/sentry/path"
 
 	// Build the client
@@ -88,7 +89,7 @@ func TestCapture(t *testing.T) {
 		if ev.EventId == "" {
 			t.Error("EventId must not be empty.")
 		}
-		if ev.Project == "" {
+		if ev.Project == 0 {
 			t.Error("Project must not be empty.")
 		}
 		if ev.Timestamp == "" {
@@ -123,7 +124,7 @@ func TestTimeout(t *testing.T) {
 
 	publicKey := "abcd"
 	secretKey := "efgh"
-	project := "1"
+	project := 1
 	sentryPath := "/sentry/path"
 
 	// Build the client
