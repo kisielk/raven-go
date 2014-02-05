@@ -195,40 +195,34 @@ func (client Client) send(packet []byte, timestamp time.Time) (err error) {
 	apiURL.Path += "/"
 	location := apiURL.String()
 
-	// for loop to follow redirects
-	for {
-		buf := bytes.NewBuffer(packet)
-		req, err := http.NewRequest("POST", location, buf)
-		if err != nil {
-			return err
-		}
+	buf := bytes.NewBuffer(packet)
+	req, err := http.NewRequest("POST", location, buf)
+	if err != nil {
+		return err
+	}
 
-		authHeader := fmt.Sprintf(xSentryAuthTemplate, timestamp.Unix(), client.PublicKey)
-		req.Header.Add("X-Sentry-Auth", authHeader)
-		req.Header.Add("Content-Type", "application/octet-stream")
-		req.Header.Add("Connection", "close")
-		req.Header.Add("Accept-Encoding", "identity")
+	authHeader := fmt.Sprintf(xSentryAuthTemplate, timestamp.Unix(), client.PublicKey)
+	req.Header.Add("X-Sentry-Auth", authHeader)
+	req.Header.Add("Content-Type", "application/octet-stream")
+	req.Header.Add("Connection", "close")
+	req.Header.Add("Accept-Encoding", "identity")
 
-		resp, err := client.httpClient.Do(req)
+	resp, err := client.httpClient.Do(req)
 
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
+	}
 
-		defer resp.Body.Close()
+	defer resp.Body.Close()
 
-		switch resp.StatusCode {
-		case 301:
-			// set the location to the new one to retry on the next iteration
-			location = resp.Header["Location"][0]
-		case 200:
-			return nil
-		default:
-			return errors.New(resp.Status)
-		}
+	switch resp.StatusCode {
+	case 200:
+		return nil
+	default:
+		return errors.New(resp.Status)
 	}
 	// should never get here
-	panic("send broke out of loop")
+	panic("oops")
 }
 
 func uuid4() (string, error) {
