@@ -116,8 +116,9 @@ func NewClient(dsn string) (client *Client, err error) {
 	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
 
-// CaptureMessage sends a message to the Sentry server. The resulting string is an event identifier.
-func (client Client) CaptureMessage(message ...string) (result string, err error) {
+// CaptureMessage sends a message to the Sentry server.
+// It returns the Sentry event ID or an empty string and any error that occurred.
+func (client Client) CaptureMessage(message ...string) (string, error) {
 	ev := Event{Message: strings.Join(message, " ")}
 	sentryErr := client.Capture(&ev)
 
@@ -127,13 +128,14 @@ func (client Client) CaptureMessage(message ...string) (result string, err error
 	return ev.EventId, nil
 }
 
-// CaptureMessagef is similar to CaptureMessage except it is using Printf like parameters for
-// formatting the message
-func (client Client) CaptureMessagef(format string, a ...interface{}) (result string, err error) {
+// CaptureMessagef is similar to CaptureMessage except it is using Printf to format the args in
+// to the given format string.
+func (client Client) CaptureMessagef(format string, args ...interface{}) (string, error) {
 	return client.CaptureMessage(fmt.Sprintf(format, a...))
 }
 
-// Sends the given event to the sentry servers after encoding it into a byte slice.
+// Capture sends the given event to Sentry.
+// Fields which are left blank are populated with default values.
 func (client Client) Capture(ev *Event) error {
 	// Fill in defaults
 	ev.Project = client.Project
