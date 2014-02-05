@@ -1,9 +1,7 @@
 raven-go
 ========
 
-A GoLang library for communicating with [Sentry][sentry].
-
-Still a work in progress.
+A Go library for communicating with [Sentry][sentry].
 
 [sentry]: http://www.github.com/dcramer/sentry
 
