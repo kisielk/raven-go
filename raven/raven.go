@@ -112,7 +112,10 @@ func NewClient(dsn string) (client *Client, err error) {
 			Dial:  timeoutDialer(httpConnectTimeout),
 			Proxy: http.ProxyFromEnvironment,
 		}, timeout: httpReadWriteTimeout}
-	httpClient := &http.Client{transport, check, nil}
+	httpClient := &http.Client{
+		Transport:     transport,
+		CheckRedirect: check,
+	}
 	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
 
