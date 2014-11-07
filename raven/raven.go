@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -45,13 +46,55 @@ type Client struct {
 	httpClient *http.Client
 }
 
+type Frame struct {
+	Filename   string `json:"filename"`
+	LineNumber int    `json:"lineno"`
+	FilePath   string `json:"abs_path"`
+	Function   string `json:"function"`
+	Module     string `json:"module"`
+}
+
+type Stacktrace struct {
+	Frames []Frame `json:"frames"`
+}
+
+func GenerateStacktrace(skip int) (stacktrace Stacktrace) {
+	maxDepth := 5
+	// Add a skip-level for ourself
+	skip++
+	for depth := 0; depth < maxDepth; depth++ {
+		pc, filePath, line, ok := runtime.Caller(skip + depth)
+		if !ok {
+			break
+		}
+		f := runtime.FuncForPC(pc)
+		if f.Name() == "runtime.main" {
+			break
+		}
+		functionName := f.Name()
+		var moduleName string
+		if strings.Contains(f.Name(), "(") {
+			components := strings.SplitN(f.Name(), ".(", 2)
+			functionName = "(" + components[1]
+			moduleName = components[0]
+		}
+		fileName := path.Base(filePath)
+		frame := Frame{Filename: fileName, LineNumber: line, FilePath: filePath,
+			Function: functionName, Module: moduleName}
+		stacktrace.Frames = append(stacktrace.Frames, frame)
+	}
+	return
+}
+
 type Event struct {
-	EventId   string `json:"event_id"`
-	Project   string `json:"project"`
-	Message   string `json:"message"`
-	Timestamp string `json:"timestamp"`
-	Level     string `json:"level"`
-	Logger    string `json:"logger"`
+	EventId    string     `json:"event_id"`
+	Project    string     `json:"project"`
+	Message    string     `json:"message"`
+	Timestamp  string     `json:"timestamp"`
+	Level      string     `json:"level"`
+	Logger     string     `json:"logger"`
+	Culprit    string     `json:"culprit"`
+	Stacktrace Stacktrace `json:"stacktrace"`
 }
 
 type sentryResponse struct {
