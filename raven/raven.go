@@ -44,6 +44,7 @@ type Client struct {
 	SecretKey  string
 	Project    string
 	httpClient *http.Client
+	encoder    EventEncoder
 }
 
 type Frame struct {
@@ -58,18 +59,22 @@ type Stacktrace struct {
 	Frames []Frame `json:"frames"`
 }
 
-func GenerateStacktrace(skip int) (stacktrace Stacktrace) {
-	maxDepth := 5
-	// Add a skip-level for ourself
-	skip++
-	for depth := 0; depth < maxDepth; depth++ {
-		pc, filePath, line, ok := runtime.Caller(skip + depth)
+func generateStacktrace() (stacktrace Stacktrace) {
+	maxDepth := 10
+	// Start on depth 1 to avoid stack for generateStacktrace
+	for depth := 1; depth < maxDepth; depth++ {
+		pc, filePath, line, ok := runtime.Caller(depth)
 		if !ok {
 			break
 		}
 		f := runtime.FuncForPC(pc)
-		if f.Name() == "runtime.main" {
+		if strings.Contains(f.Name(), "runtime") {
+			// Stop when reaching runtime
 			break
+		}
+		if strings.Contains(f.Name(), "raven.Client") {
+			// Skip internal calls
+			continue
 		}
 		functionName := f.Name()
 		var moduleName string
@@ -159,7 +164,7 @@ func NewClient(dsn string) (client *Client, err error) {
 		Transport:     transport,
 		CheckRedirect: check,
 	}
-	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
+	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project, encoder: &Encoder{}}, nil
 }
 
 // CaptureMessage sends a message to the Sentry server.
@@ -203,27 +208,17 @@ func (client Client) Capture(ev *Event) error {
 		ev.Timestamp = now.Format(iso8601)
 	}
 
+	if len(ev.Stacktrace.Frames) == 0 {
+		ev.Stacktrace = generateStacktrace()
+	}
+
+	buf, err := client.encoder.Encode(ev)
+	if err != nil {
+		return err
+	}
+
 	// Send
 	timestamp, err := time.Parse(iso8601, ev.Timestamp)
-	if err != nil {
-		return err
-	}
-
-	buf := new(bytes.Buffer)
-	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
-	writer := zlib.NewWriter(b64Encoder)
-	jsonEncoder := json.NewEncoder(writer)
-
-	if err := jsonEncoder.Encode(ev); err != nil {
-		return err
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return err
-	}
-
-	err = b64Encoder.Close()
 	if err != nil {
 		return err
 	}
@@ -310,4 +305,30 @@ func (T *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	})
 	defer timer.Stop()
 	return T.httpTransport.RoundTrip(req)
+}
+
+type EventEncoder interface {
+	Encode(*Event) (*bytes.Buffer, error)
+}
+
+type Encoder struct{}
+
+func (encoder *Encoder) Encode(ev *Event) (buf *bytes.Buffer, err error) {
+	buf = new(bytes.Buffer)
+	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
+	writer := zlib.NewWriter(b64Encoder)
+	jsonEncoder := json.NewEncoder(writer)
+
+	if err = jsonEncoder.Encode(ev); err != nil {
+		return
+	}
+	err = writer.Close()
+	if err != nil {
+		return
+	}
+
+	if err = b64Encoder.Close(); err != nil {
+		return
+	}
+	return buf, nil
 }

@@ -1,6 +1,7 @@
 package raven
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,13 +18,14 @@ func BuildSentryDSN(baseUrl, publicKey, secretKey, project, sentryPath string) s
 	return u.String()
 }
 
-func TestCaptureMessage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(
+func GetServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, req *http.Request) {
 			fmt.Fprint(w, "hello")
 		}))
-	defer server.Close()
+}
 
+func GetClient(server *httptest.Server) *Client {
 	publicKey := "abcd"
 	secretKey := "efgh"
 	project := "1"
@@ -32,8 +34,19 @@ func TestCaptureMessage(t *testing.T) {
 	// Build the client
 	client, err := NewClient(BuildSentryDSN(server.URL, publicKey, secretKey, project, sentryPath))
 	if err != nil {
-		t.Fatalf("failed to make client: %s", err)
+		panic(fmt.Sprintf("failed to make client: %s", err))
 	}
+	return client
+}
+
+func TestClientSetup(t *testing.T) {
+	publicKey := "abcd"
+	secretKey := "efgh"
+	project := "1"
+	sentryPath := "/sentry/path"
+	server := GetServer()
+	defer server.Close()
+	client := GetClient(server)
 
 	// Test the client is set up correctly
 	if client.PublicKey != publicKey {
@@ -52,8 +65,13 @@ func TestCaptureMessage(t *testing.T) {
 		t.Logf("bad path: got %s, want %s", client.URL.Path, sentryPath)
 		t.Fail()
 	}
+}
 
-	_, err = client.CaptureMessage("test message")
+func TestCaptureMessage(t *testing.T) {
+	server := GetServer()
+	defer server.Close()
+	client := GetClient(server)
+	_, err := client.CaptureMessage("test message")
 	if err != nil {
 		t.Logf("CaptureMessage failed: %s", err)
 		t.Fail()
@@ -61,22 +79,9 @@ func TestCaptureMessage(t *testing.T) {
 }
 
 func TestCapture(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(
-		func(w http.ResponseWriter, req *http.Request) {
-			fmt.Fprint(w, "hello")
-		}))
+	server := GetServer()
 	defer server.Close()
-
-	publicKey := "abcd"
-	secretKey := "efgh"
-	project := "1"
-	sentryPath := "/sentry/path"
-
-	// Build the client
-	client, err := NewClient(BuildSentryDSN(server.URL, publicKey, secretKey, project, sentryPath))
-	if err != nil {
-		t.Fatalf("failed to make client: %s", err)
-	}
+	client := GetClient(server)
 
 	// Send the message
 	testEvent := func(ev *Event) {
@@ -120,30 +125,48 @@ func TestTimeout(t *testing.T) {
 			fmt.Fprint(w, "hello")
 		}))
 	defer server.Close()
+	client := GetClient(server)
 
-	publicKey := "abcd"
-	secretKey := "efgh"
-	project := "1"
-	sentryPath := "/sentry/path"
-
-	// Build the client
-	dsn := BuildSentryDSN(server.URL, publicKey, secretKey, project, sentryPath)
-	client, err := NewClient(dsn)
-	if err != nil {
-		t.Fatalf("failed to make client: %s", err)
-	}
-	_, err = client.CaptureMessage("Test message")
+	_, err := client.CaptureMessage("Test message")
 	if err == nil {
 		t.Fatalf("Request should have timed out")
 	}
 
 	// Build the client with a timeout
-	client, err = NewClient(dsn + "?timeout=4")
+	client, err = NewClient(client.URL.String() + "?timeout=4")
 	if err != nil {
 		t.Fatalf("failed to make client: %s", err)
 	}
 	_, err = client.CaptureMessage("Test message")
 	if err != nil {
 		t.Fatalf("Request should not have timed out")
+	}
+}
+
+type CaptureEncoder struct {
+	Event *Event
+}
+
+func (encoder *CaptureEncoder) Encode(ev *Event) (buf *bytes.Buffer, err error) {
+	encoder.Event = ev
+	// Reture error since we're only interested in capturing the event
+	err = fmt.Errorf("MockError")
+	return
+}
+
+func TestStacktrace(t *testing.T) {
+	encoder := &CaptureEncoder{}
+	client := Client{nil, "", "", "", nil, encoder}
+
+	// We nest the calls, and ensur that the correct part of the stack is present
+	func() {
+		func() {
+			client.CaptureMessage("Test With trace")
+		}()
+	}()
+
+	// Should be four frames on stack, two for testrunner, two for nesting
+	if len(encoder.Event.Stacktrace.Frames) != 4 {
+		t.Fatalf("Wrong number of frames on stack, %v", encoder.Event.Stacktrace)
 	}
 }
