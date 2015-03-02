@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -45,13 +46,59 @@ type Client struct {
 	httpClient *http.Client
 }
 
+type Frame struct {
+	Filename   string `json:"filename"`
+	LineNumber int    `json:"lineno"`
+	FilePath   string `json:"abs_path"`
+	Function   string `json:"function"`
+	Module     string `json:"module"`
+}
+
+type Stacktrace struct {
+	Frames []Frame `json:"frames"`
+}
+
+func generateStacktrace() (stacktrace Stacktrace) {
+	maxDepth := 10
+	// Start on depth 1 to avoid stack for generateStacktrace
+	for depth := 1; depth < maxDepth; depth++ {
+		pc, filePath, line, ok := runtime.Caller(depth)
+		if !ok {
+			break
+		}
+		f := runtime.FuncForPC(pc)
+		if strings.Contains(f.Name(), "runtime") {
+			// Stop when reaching runtime
+			break
+		}
+		if strings.Contains(f.Name(), "raven.Client") {
+			// Skip internal calls
+			continue
+		}
+		functionName := f.Name()
+		var moduleName string
+		if strings.Contains(f.Name(), "(") {
+			components := strings.SplitN(f.Name(), ".(", 2)
+			functionName = "(" + components[1]
+			moduleName = components[0]
+		}
+		fileName := path.Base(filePath)
+		frame := Frame{Filename: fileName, LineNumber: line, FilePath: filePath,
+			Function: functionName, Module: moduleName}
+		stacktrace.Frames = append(stacktrace.Frames, frame)
+	}
+	return
+}
+
 type Event struct {
-	EventId   string `json:"event_id"`
-	Project   string `json:"project"`
-	Message   string `json:"message"`
-	Timestamp string `json:"timestamp"`
-	Level     string `json:"level"`
-	Logger    string `json:"logger"`
+	EventId    string     `json:"event_id"`
+	Project    string     `json:"project"`
+	Message    string     `json:"message"`
+	Timestamp  string     `json:"timestamp"`
+	Level      string     `json:"level"`
+	Logger     string     `json:"logger"`
+	Culprit    string     `json:"culprit"`
+	Stacktrace Stacktrace `json:"stacktrace"`
 }
 
 type sentryResponse struct {
@@ -160,27 +207,17 @@ func (client Client) Capture(ev *Event) error {
 		ev.Timestamp = now.Format(iso8601)
 	}
 
+	if len(ev.Stacktrace.Frames) == 0 {
+		ev.Stacktrace = generateStacktrace()
+	}
+
+	buf, err := encode(ev)
+	if err != nil {
+		return err
+	}
+
 	// Send
 	timestamp, err := time.Parse(iso8601, ev.Timestamp)
-	if err != nil {
-		return err
-	}
-
-	buf := new(bytes.Buffer)
-	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
-	writer := zlib.NewWriter(b64Encoder)
-	jsonEncoder := json.NewEncoder(writer)
-
-	if err := jsonEncoder.Encode(ev); err != nil {
-		return err
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return err
-	}
-
-	err = b64Encoder.Close()
 	if err != nil {
 		return err
 	}
@@ -267,4 +304,24 @@ func (T *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	})
 	defer timer.Stop()
 	return T.httpTransport.RoundTrip(req)
+}
+
+func encode(ev *Event) (buf *bytes.Buffer, err error) {
+	buf = new(bytes.Buffer)
+	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
+	writer := zlib.NewWriter(b64Encoder)
+	jsonEncoder := json.NewEncoder(writer)
+
+	if err = jsonEncoder.Encode(ev); err != nil {
+		return
+	}
+	err = writer.Close()
+	if err != nil {
+		return
+	}
+
+	if err = b64Encoder.Close(); err != nil {
+		return
+	}
+	return buf, nil
 }
