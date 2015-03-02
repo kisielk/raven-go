@@ -58,7 +58,8 @@ type Stacktrace struct {
 	Frames []Frame `json:"frames"`
 }
 
-func generateStacktrace() (stacktrace Stacktrace) {
+func generateStacktrace() Stacktrace {
+	var stacktrace Stacktrace
 	maxDepth := 10
 	// Start on depth 1 to avoid stack for generateStacktrace
 	for depth := 1; depth < maxDepth; depth++ {
@@ -87,7 +88,7 @@ func generateStacktrace() (stacktrace Stacktrace) {
 			Function: functionName, Module: moduleName}
 		stacktrace.Frames = append(stacktrace.Frames, frame)
 	}
-	return
+	return stacktrace
 }
 
 type Event struct {
@@ -222,7 +223,7 @@ func (client Client) Capture(ev *Event) error {
 		return err
 	}
 
-	err = client.send(buf.Bytes(), timestamp)
+	err = client.send(buf, timestamp)
 	if err != nil {
 		return err
 	}
@@ -306,22 +307,22 @@ func (T *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return T.httpTransport.RoundTrip(req)
 }
 
-func encode(ev *Event) (buf *bytes.Buffer, err error) {
-	buf = new(bytes.Buffer)
+func encode(ev *Event) ([]byte, error) {
+	buf := new(bytes.Buffer)
 	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
 	writer := zlib.NewWriter(b64Encoder)
 	jsonEncoder := json.NewEncoder(writer)
 
-	if err = jsonEncoder.Encode(ev); err != nil {
-		return
+	if err := jsonEncoder.Encode(ev); err != nil {
+		return nil, err
 	}
-	err = writer.Close()
+	err := writer.Close()
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	if err = b64Encoder.Close(); err != nil {
-		return
+	if err := b64Encoder.Close(); err != nil {
+		return nil, err
 	}
-	return buf, nil
+	return buf.Bytes(), nil
 }
