@@ -264,8 +264,6 @@ func (client Client) send(packet []byte, timestamp time.Time) (err error) {
 	default:
 		return errors.New(resp.Status)
 	}
-	// should never get here
-	panic("oops")
 }
 
 func uuid4() (string, error) {
