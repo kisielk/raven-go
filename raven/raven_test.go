@@ -1,8 +1,11 @@
 package raven
 
 import (
-	"bytes"
+	"compress/zlib"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -143,20 +146,34 @@ func TestTimeout(t *testing.T) {
 	}
 }
 
-type CaptureEncoder struct {
-	Event *Event
-}
+func decode(buf io.ReadCloser) (ev *Event, err error) {
+	ev = new(Event)
+	b64Decoder := base64.NewDecoder(base64.StdEncoding, buf)
+	reader, err := zlib.NewReader(b64Decoder)
+	if err != nil {
+		return
+	}
 
-func (encoder *CaptureEncoder) Encode(ev *Event) (buf *bytes.Buffer, err error) {
-	encoder.Event = ev
-	// Reture error since we're only interested in capturing the event
-	err = fmt.Errorf("MockError")
-	return
+	jsonDecoder := json.NewDecoder(reader)
+	if err = jsonDecoder.Decode(ev); err != nil {
+		return
+	}
+
+	if err = reader.Close(); err != nil {
+		return
+	}
+	return ev, nil
 }
 
 func TestStacktrace(t *testing.T) {
-	encoder := &CaptureEncoder{}
-	client := Client{nil, "", "", "", nil, encoder}
+	var capturedEvent *Event
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, req *http.Request) {
+			fmt.Fprint(w, "hello")
+			capturedEvent, _ = decode(req.Body)
+		}))
+	defer server.Close()
+	client := GetClient(server)
 
 	// We nest the calls, and ensur that the correct part of the stack is present
 	func() {
@@ -166,7 +183,7 @@ func TestStacktrace(t *testing.T) {
 	}()
 
 	// Should be four frames on stack, two for testrunner, two for nesting
-	if len(encoder.Event.Stacktrace.Frames) != 4 {
-		t.Fatalf("Wrong number of frames on stack, %v", encoder.Event.Stacktrace)
+	if len(capturedEvent.Stacktrace.Frames) != 4 {
+		t.Fatalf("Wrong number of frames on stack, %v", capturedEvent.Stacktrace)
 	}
 }

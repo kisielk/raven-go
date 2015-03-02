@@ -44,7 +44,6 @@ type Client struct {
 	SecretKey  string
 	Project    string
 	httpClient *http.Client
-	encoder    eventEncoder
 }
 
 type Frame struct {
@@ -164,7 +163,7 @@ func NewClient(dsn string) (client *Client, err error) {
 		Transport:     transport,
 		CheckRedirect: check,
 	}
-	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project, encoder: &encoder{}}, nil
+	return &Client{URL: u, PublicKey: publicKey, SecretKey: secretKey, httpClient: httpClient, Project: project}, nil
 }
 
 // CaptureMessage sends a message to the Sentry server.
@@ -212,7 +211,7 @@ func (client Client) Capture(ev *Event) error {
 		ev.Stacktrace = generateStacktrace()
 	}
 
-	buf, err := client.encoder.Encode(ev)
+	buf, err := encode(ev)
 	if err != nil {
 		return err
 	}
@@ -307,13 +306,7 @@ func (T *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return T.httpTransport.RoundTrip(req)
 }
 
-type eventEncoder interface {
-	Encode(*Event) (*bytes.Buffer, error)
-}
-
-type encoder struct{}
-
-func (encoder *encoder) Encode(ev *Event) (buf *bytes.Buffer, err error) {
+func encode(ev *Event) (buf *bytes.Buffer, err error) {
 	buf = new(bytes.Buffer)
 	b64Encoder := base64.NewEncoder(base64.StdEncoding, buf)
 	writer := zlib.NewWriter(b64Encoder)
