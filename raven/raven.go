@@ -69,8 +69,8 @@ func generateStacktrace() Stacktrace {
 		}
 		f := runtime.FuncForPC(pc)
 		if strings.Contains(f.Name(), "runtime") {
-			// Stop when reaching runtime
-			break
+			// Skip runtime calls
+			continue
 		}
 		if strings.Contains(f.Name(), "raven.Client") {
 			// Skip internal calls
